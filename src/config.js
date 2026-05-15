@@ -79,6 +79,7 @@ function loadFromJson() {
     reportTo:      g.report_to     || '',
     retentionDays: g.retention_days || 30,
     port:          g.port          || 3000,
+    schedule:      g.schedule      || '0 7 * * *',
     mailboxes,
   };
 }
@@ -110,6 +111,7 @@ function loadFromEnv() {
     reportTo:      process.env.REPORT_TO || '',
     retentionDays: parseInt(process.env.RETENTION_DAYS || '30', 10),
     port:          parseInt(process.env.PORT || '3000', 10),
+    schedule:      process.env.SCHEDULE || '0 7 * * *',
     mailboxes: [{
       id:      mailboxId,
       name:    'Default',

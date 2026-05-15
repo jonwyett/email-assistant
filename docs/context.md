@@ -49,7 +49,7 @@ See `docs/project-overview-phase1.md` for the full design philosophy and `docs/s
 
 The app runs as a persistent server (`npm start` → `node server.js`, port 3000) that combines the Express API, a cron scheduler, and a management SPA into one process.
 
-**Scheduler:** `src/scheduler.js` wraps `node-cron`. The schedule is loaded from `server-config.json` at startup (default `0 7 * * *`) and can be updated live via `PUT /api/config/schedule` without restarting. Only one pipeline run executes at a time — `POST /api/run` returns 409 if already running.
+**Scheduler:** `src/scheduler.js` wraps `node-cron`. The schedule is loaded from `config.json` (`global.schedule`, default `0 7 * * *`) at startup and can be updated live via `PUT /api/config/schedule` without restarting. Only one pipeline run executes at a time — `POST /api/run` returns 409 if already running.
 
 **Log streaming:** `src/log-stream.js` intercepts all `console.log/error/warn` calls globally at startup, buffers the last 500 entries, and streams new entries to subscribers. The SSE endpoint `GET /api/logs` replays the buffer then streams live — the browser shows real-time pipeline output.
 
@@ -167,7 +167,6 @@ Error tiers: pre-flight failure → abort; per-mailbox download/import failure �
 
 ```
 server.js                   ← persistent server entry point (npm start, port 3000)
-server-config.json          ← runtime config: cron schedule + port (committed; updated by API)
 process.json                ← PM2 deployment config
 
 routes/api/

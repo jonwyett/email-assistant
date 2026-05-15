@@ -1,7 +1,6 @@
 'use strict';
 
 const path      = require('path');
-const fs        = require('fs');
 const express   = require('express');
 const logStream = require('./src/log-stream');
 const scheduler = require('./src/scheduler');
@@ -69,14 +68,7 @@ app.get('/{*path}', (req, res) => res.sendFile(path.join(__dirname, 'public/inde
 
 // ── Scheduler ─────────────────────────────────────────────────────────────────
 
-const SERVER_CONFIG_PATH = path.join(__dirname, 'server-config.json');
-
-function getSchedule() {
-  if (!fs.existsSync(SERVER_CONFIG_PATH)) return '0 7 * * *';
-  try { return JSON.parse(fs.readFileSync(SERVER_CONFIG_PATH, 'utf8')).schedule || '0 7 * * *'; } catch (_) { return '0 7 * * *'; }
-}
-
-scheduler.start(getSchedule(), runDaily);
+scheduler.start(appConfig.schedule, runDaily);
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
