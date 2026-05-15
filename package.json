@@ -24,7 +24,7 @@
     "routes": { "ui": true, "api": true }
   },
   "dependencies": {
-    "better-sqlite3": "^9.0.0",
+    "better-sqlite3": "^11.0.0",
     "dotenv": "^16.0.0",
     "express": "^5.2.1",
     "html-to-text": "^9.0.0",
