@@ -1,0 +1,12 @@
+{
+  "name": "email-assistant-inspector",
+  "version": "1.0.0",
+  "description": "Read-only web inspector for the email assistant",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

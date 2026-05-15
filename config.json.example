@@ -1,0 +1,34 @@
+{
+  "global": {
+    "llm_base_url": "http://localhost:1234/v1",
+    "llm_model": "",
+    "llm_timeout_ms": 120000,
+    "llm_preference": ["gemma-3", "gemma", "llama-3"],
+    "retention_days": 30,
+    "port": 3000,
+    "schedule": "0 7 * * *",
+    "report_to": "your_digest@example.com",
+    "smtp": {
+      "host": "smtp.gmail.com",
+      "port": 587,
+      "secure": false,
+      "user": "your@gmail.com",
+      "password": "your_app_password"
+    }
+  },
+  "mailboxes": [
+    {
+      "id": "personal",
+      "name": "Personal Gmail",
+      "enabled": true,
+      "imap": {
+        "host": "imap.gmail.com",
+        "port": 993,
+        "secure": true,
+        "user": "your@gmail.com",
+        "password": "your_app_password",
+        "mark_read": false
+      }
+    }
+  ]
+}

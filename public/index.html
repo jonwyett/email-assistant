@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Email Assistant</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous" />
+  <style>
+    body { font-size: 0.9rem; }
+    .tab-panel { min-height: 300px; }
+    .pre-scroll { max-height: 420px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; font-size: 0.8rem; }
+    .trunc-sm  { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
+    .trunc-md  { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
+    .trunc-lg  { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
+    .stat-val  { font-size: 1.5rem; font-weight: 600; }
+    tbody tr[data-clickable] { cursor: pointer; }
+    #log-box { height: 400px; overflow-y: auto; background: #1a1a2e; color: #e0e0e0; font-family: monospace; font-size: 0.78rem; padding: 10px; border-radius: 4px; }
+    .log-info  { color: #a8d8a8; }
+    .log-warn  { color: #f6c90e; }
+    .log-error { color: #ff6b6b; }
+    .log-ts    { color: #666; margin-right: 6px; }
+    #run-btn.running { animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.6; } }
+  </style>
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-dark bg-dark px-3 py-2 d-flex align-items-center gap-3">
+  <span class="navbar-brand mb-0 h5 me-3">&#9993; Email Assistant</span>
+  <div class="d-flex align-items-center gap-2">
+    <label class="text-light small mb-0">Mailbox:</label>
+    <select class="form-select form-select-sm" id="mailbox-select" style="min-width:160px"></select>
+  </div>
+  <div class="ms-auto d-flex align-items-center gap-2">
+    <span id="run-status-badge" class="badge bg-secondary">idle</span>
+    <button class="btn btn-sm btn-success" id="run-btn-nav">&#9654; Run Now</button>
+  </div>
+</nav>
+
+<div class="container-fluid mt-3 px-4">
+
+  <ul class="nav nav-tabs" id="mainTabs">
+    <li class="nav-item"><a class="nav-link active" href="#" data-tab="dashboard">Dashboard</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-tab="run">Run &amp; Logs</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-tab="emails">Emails</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-tab="groups">Groups</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-tab="memory">Memory</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-tab="digests">Digests</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-tab="brainprefs">Brain &amp; Prefs</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-tab="settings">Settings</a></li>
+  </ul>
+
+  <!-- Dashboard -->
+  <div id="panel-dashboard" class="tab-panel mt-3">
+    <div class="row g-3">
+      <div class="col-md-4 col-lg-3">
+        <div class="card h-100">
+          <div class="card-header fw-semibold">Database Stats</div>
+          <div class="card-body" id="stats-body"><div class="text-muted small">Loading…</div></div>
+        </div>
+      </div>
+      <div class="col-md-8 col-lg-9">
+        <div class="card h-100">
+          <div class="card-header fw-semibold">Recent Processing Runs</div>
+          <div class="card-body p-0" id="runs-body"><div class="p-3 text-muted small">Loading…</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Run & Logs -->
+  <div id="panel-run" class="tab-panel mt-3 d-none">
+    <div class="row g-3 mb-3">
+      <div class="col-auto">
+        <button class="btn btn-success" id="run-btn">&#9654; Run Pipeline Now</button>
+      </div>
+      <div class="col-auto d-flex align-items-center gap-2">
+        <span class="text-muted small">Status:</span>
+        <span id="run-status-text" class="fw-semibold">idle</span>
+      </div>
+      <div class="col-auto d-flex align-items-center gap-2">
+        <span class="text-muted small">Last run:</span>
+        <span id="run-last-run" class="small text-muted">—</span>
+      </div>
+      <div class="col-auto ms-auto">
+        <button class="btn btn-sm btn-outline-secondary" id="log-clear">Clear display</button>
+        <button class="btn btn-sm btn-outline-secondary ms-1" id="log-scroll-toggle" data-auto="true">Auto-scroll: ON</button>
+      </div>
+    </div>
+    <div id="log-box"></div>
+    <div id="run-error" class="mt-2"></div>
+  </div>
+
+  <!-- Emails -->
+  <div id="panel-emails" class="tab-panel mt-3 d-none">
+    <div class="row g-2 mb-3 align-items-end">
+      <div class="col-auto">
+        <label class="form-label mb-1 small fw-semibold">Category</label>
+        <select class="form-select form-select-sm" id="email-cat"><option value="">All categories</option></select>
+      </div>
+      <div class="col-auto">
+        <label class="form-label mb-1 small fw-semibold">Status</label>
+        <select class="form-select form-select-sm" id="email-digested">
+          <option value="">All</option>
+          <option value="false">Pending (undigested)</option>
+          <option value="true">Digested</option>
+        </select>
+      </div>
+      <div class="col-auto">
+        <label class="form-label mb-1 small fw-semibold">Per page</label>
+        <select class="form-select form-select-sm" id="email-pagesize">
+          <option value="25" selected>25</option><option value="50">50</option><option value="100">100</option>
+        </select>
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-sm btn-outline-secondary" id="email-refresh">Refresh</button>
+      </div>
+    </div>
+    <div id="emails-table-wrap"><div class="text-muted small">Loading…</div></div>
+    <div id="emails-pagination" class="mt-2 d-flex align-items-center gap-2"></div>
+  </div>
+
+  <!-- Groups -->
+  <div id="panel-groups" class="tab-panel mt-3 d-none">
+    <div id="groups-wrap"><div class="text-muted small">Loading…</div></div>
+  </div>
+
+  <!-- Memory -->
+  <div id="panel-memory" class="tab-panel mt-3 d-none">
+    <div id="memory-wrap"><div class="text-muted small">Loading…</div></div>
+  </div>
+
+  <!-- Digests -->
+  <div id="panel-digests" class="tab-panel mt-3 d-none">
+    <div id="digests-wrap"><div class="text-muted small">Loading…</div></div>
+  </div>
+
+  <!-- Brain & Prefs -->
+  <div id="panel-brainprefs" class="tab-panel mt-3 d-none">
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <div class="card">
+          <div class="card-header fw-semibold">Brain <small class="text-muted fw-normal">(brain.md — auto-generated)</small></div>
+          <div class="card-body p-2">
+            <pre id="brain-content" class="pre-scroll mb-0" style="max-height:70vh">Loading…</pre>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card">
+          <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+            User Prefs <small class="text-muted fw-normal">(user-prefs.md)</small>
+            <button class="btn btn-sm btn-primary" id="prefs-save-btn">Save</button>
+          </div>
+          <div class="card-body p-2">
+            <textarea id="prefs-content" class="form-control font-monospace" style="height:70vh;font-size:0.8rem;resize:none">Loading…</textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="prefs-save-msg" class="mt-2"></div>
+  </div>
+
+  <!-- Settings -->
+  <div id="panel-settings" class="tab-panel mt-3 d-none">
+    <div class="row g-4">
+      <div class="col-lg-5">
+        <div class="card">
+          <div class="card-header fw-semibold">Schedule</div>
+          <div class="card-body">
+            <p class="small text-muted">Cron expression for the daily pipeline run. Uses standard 5-field format: <code>minute hour day month weekday</code></p>
+            <div class="d-flex gap-2 align-items-center">
+              <input type="text" class="form-control form-control-sm font-monospace" id="schedule-input" placeholder="0 7 * * *" style="max-width:160px" />
+              <button class="btn btn-sm btn-primary" id="schedule-save">Save</button>
+              <span id="schedule-msg" class="small"></span>
+            </div>
+            <div class="mt-2 text-muted small" id="schedule-hint"></div>
+            <div class="mt-3">
+              <div class="fw-semibold small mb-1">Common schedules</div>
+              <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-sm btn-outline-secondary preset-schedule" data-expr="0 7 * * *">7:00 AM daily</button>
+                <button class="btn btn-sm btn-outline-secondary preset-schedule" data-expr="0 8 * * *">8:00 AM daily</button>
+                <button class="btn btn-sm btn-outline-secondary preset-schedule" data-expr="0 7 * * 1-5">7:00 AM weekdays</button>
+                <button class="btn btn-sm btn-outline-secondary preset-schedule" data-expr="0 */6 * * *">Every 6 hours</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-7">
+        <div class="card">
+          <div class="card-header fw-semibold">Configuration (read-only)</div>
+          <div class="card-body" id="config-body"><div class="text-muted small">Loading…</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Detail modal -->
+<div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title mb-0" id="detailModalLabel">Detail</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="detailModalBody"><div class="text-muted">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+<script>
+'use strict';
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
+function esc(str) {
+  if (str == null) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return isNaN(d) ? esc(iso) : d.toLocaleString();
+}
+
+function fmtBool(v) {
+  return v ? '<span class="text-success">&#10003;</span>' : '<span class="text-secondary">&#10005;</span>';
+}
+
+function impBadge(n) {
+  if (n == null) return '<span class="badge bg-secondary text-white">?</span>';
+  const cls = n <= 3 ? 'bg-secondary' : n <= 6 ? 'bg-warning text-dark' : 'bg-danger';
+  return '<span class="badge ' + cls + '">' + n + '</span>';
+}
+
+function runBadge(s) {
+  const m = { complete:'bg-success', running:'bg-primary', partial:'bg-warning text-dark' };
+  return '<span class="badge ' + (m[s]||'bg-secondary') + '">' + esc(s) + '</span>';
+}
+
+function memBadge(s) {
+  const m = { permanent:'bg-primary', active:'bg-success', expired:'bg-secondary' };
+  return '<span class="badge ' + (m[s]||'bg-secondary') + '">' + esc(s) + '</span>';
+}
+
+function catBadge(c) {
+  return c ? '<span class="badge bg-info text-dark">' + esc(c) + '</span>' : '—';
+}
+
+function errHtml(msg) {
+  return '<div class="alert alert-danger">' + esc(msg) + '</div>';
+}
+
+function drow(label, val) {
+  return '<tr><th class="pe-3 text-nowrap fw-normal text-muted" style="width:160px">' + esc(label) + '</th><td>' + val + '</td></tr>';
+}
+
+async function api(url, opts) {
+  const r = await fetch(url, opts);
+  if (!r.ok) {
+    let msg = 'HTTP ' + r.status;
+    try { msg = (await r.json()).error || msg; } catch(_) {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+
+// ─── Modal ────────────────────────────────────────────────────────────────────
+
+let _modal;
+function showModal(title, body) {
+  document.getElementById('detailModalLabel').textContent = title;
+  document.getElementById('detailModalBody').innerHTML = body;
+  if (!_modal) _modal = new bootstrap.Modal(document.getElementById('detailModal'));
+  _modal.show();
+}
+
+// ─── Mailbox state ────────────────────────────────────────────────────────────
+
+let _mailboxes = [];
+let _activeMailboxId = null;
+const _loaded = {};
+
+function currentMailboxId() { return _activeMailboxId; }
+
+function mbApi(path, opts) {
+  return api('/api/mailboxes/' + currentMailboxId() + path, opts);
+}
+
+function onMailboxChange() {
+  // Reload all mailbox-dependent panels
+  ['dashboard','emails','groups','memory','brainprefs'].forEach(t => delete _loaded[t]);
+  const active = document.querySelector('#mainTabs .nav-link.active')?.dataset.tab;
+  if (active) _loaders[active]?.();
+}
+
+async function initMailboxes() {
+  try {
+    _mailboxes = await api('/api/mailboxes');
+    const sel = document.getElementById('mailbox-select');
+    sel.innerHTML = _mailboxes.map(m =>
+      '<option value="' + esc(m.id) + '"' + (!m.enabled ? ' disabled' : '') + '>' + esc(m.name) + (m.enabled ? '' : ' (disabled)') + '</option>'
+    ).join('');
+    _activeMailboxId = _mailboxes.find(m => m.enabled)?.id || _mailboxes[0]?.id;
+    if (_activeMailboxId) sel.value = _activeMailboxId;
+    sel.addEventListener('change', e => { _activeMailboxId = e.target.value; onMailboxChange(); });
+  } catch (err) {
+    document.getElementById('mailbox-select').innerHTML = '<option>Error loading</option>';
+  }
+}
+
+// ─── Tab switching ────────────────────────────────────────────────────────────
+
+const _loaders = {
+  dashboard:  loadDashboard,
+  run:        loadRun,
+  emails:     loadEmails,
+  groups:     loadGroups,
+  memory:     loadMemory,
+  digests:    loadDigests,
+  brainprefs: loadBrainPrefs,
+  settings:   loadSettings,
+};
+
+function switchTab(tab) {
+  document.querySelectorAll('#mainTabs .nav-link').forEach(l => l.classList.toggle('active', l.dataset.tab === tab));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('d-none', p.id !== 'panel-' + tab));
+  if (!_loaded[tab]) { _loaded[tab] = true; _loaders[tab]?.(); }
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+
+async function loadDashboard() {
+  try {
+    const { stats: s, recentRuns } = await mbApi('/dashboard');
+
+    document.getElementById('stats-body').innerHTML =
+      '<table class="table table-sm table-borderless mb-0"><tbody>' +
+      [
+        ['Total Emails',    '<span class="stat-val">' + s.total    + '</span>'],
+        ['Analyzed',        '<span class="stat-val text-primary">' + s.analyzed + '</span>'],
+        ['Digested',        '<span class="stat-val text-success">' + s.digested + '</span>'],
+        ['Pending',         '<span class="stat-val text-warning">' + s.pending  + '</span>'],
+        ['Groups',          '<span class="stat-val">' + s.groups   + '</span>'],
+        ['Active Memories', '<span class="stat-val">' + s.memory   + '</span>'],
+      ].map(([l,v]) => '<tr><td class="text-muted py-1">' + l + '</td><td class="py-1">' + v + '</td></tr>').join('') +
+      '</tbody></table>';
+
+    if (!recentRuns.length) {
+      document.getElementById('runs-body').innerHTML = '<div class="p-3 text-muted small">No processing runs recorded yet.</div>';
+      return;
+    }
+
+    document.getElementById('runs-body').innerHTML =
+      '<table class="table table-sm table-hover mb-0"><thead class="table-light"><tr>' +
+      '<th>#</th><th>Type</th><th>Status</th><th>Started</th><th>Completed</th><th>Emails</th><th>Notes</th>' +
+      '</tr></thead><tbody>' +
+      recentRuns.map(r =>
+        '<tr><td class="text-muted">' + r.id + '</td>' +
+        '<td><code>' + esc(r.run_type) + '</code></td>' +
+        '<td>' + runBadge(r.status) + '</td>' +
+        '<td class="small text-nowrap">' + fmtDate(r.started_at) + '</td>' +
+        '<td class="small text-nowrap">' + fmtDate(r.completed_at) + '</td>' +
+        '<td>' + (r.email_count ?? '—') + '</td>' +
+        '<td class="small text-muted">' + esc(r.notes ?? '') + '</td></tr>'
+      ).join('') + '</tbody></table>';
+  } catch (err) {
+    document.getElementById('stats-body').innerHTML = errHtml(err.message);
+  }
+}
+
+// ─── Run & Logs ───────────────────────────────────────────────────────────────
+
+let _sseSource = null;
+let _logAutoScroll = true;
+
+function loadRun() {
+  refreshRunStatus();
+  startLogStream();
+}
+
+async function refreshRunStatus() {
+  try {
+    const s = await api('/api/run/status');
+    updateRunStatusUI(s);
+  } catch (_) {}
+}
+
+function updateRunStatusUI(s) {
+  const badge = document.getElementById('run-status-badge');
+  const text  = document.getElementById('run-status-text');
+  const last  = document.getElementById('run-last-run');
+  const btn   = document.getElementById('run-btn');
+  const navBtn = document.getElementById('run-btn-nav');
+  const errEl  = document.getElementById('run-error');
+
+  if (s.running) {
+    badge.className = 'badge bg-primary';  badge.textContent = 'running';
+    text.textContent = 'running'; text.className = 'fw-semibold text-primary';
+    btn.disabled = true; btn.classList.add('running');
+    navBtn.disabled = true;
+  } else {
+    badge.className = 'badge bg-secondary'; badge.textContent = 'idle';
+    text.textContent = 'idle'; text.className = 'fw-semibold text-muted';
+    btn.disabled = false; btn.classList.remove('running');
+    navBtn.disabled = false;
+  }
+
+  last.textContent = s.lastRun ? fmtDate(s.lastRun) : '—';
+
+  if (s.lastError) {
+    errEl.innerHTML = '<div class="alert alert-warning py-2">Last run error: ' + esc(s.lastError) + '</div>';
+  } else {
+    errEl.innerHTML = '';
+  }
+}
+
+function startLogStream() {
+  if (_sseSource) return;
+  _sseSource = new EventSource('/api/logs');
+
+  _sseSource.onmessage = e => {
+    const entry = JSON.parse(e.data);
+    appendLogEntry(entry);
+  };
+
+  _sseSource.onerror = () => {
+    appendLogEntry({ ts: new Date().toISOString(), level: 'warn', text: '[log stream disconnected — will reconnect]' });
+  };
+}
+
+function appendLogEntry(entry) {
+  const box = document.getElementById('log-box');
+  if (!box) return;
+  const line = document.createElement('div');
+  const ts   = entry.ts ? entry.ts.slice(11, 19) : '';
+  line.className = 'log-' + (entry.level || 'info');
+  line.innerHTML = '<span class="log-ts">' + esc(ts) + '</span>' + esc(entry.text);
+  box.appendChild(line);
+  if (_logAutoScroll) box.scrollTop = box.scrollHeight;
+}
+
+async function triggerRun() {
+  try {
+    await api('/api/run', { method: 'POST' });
+    switchTab('run');
+    _loaded['run'] = true;  // already initialized
+    // Poll status until done
+    const poll = setInterval(async () => {
+      try {
+        const s = await api('/api/run/status');
+        updateRunStatusUI(s);
+        if (!s.running) {
+          clearInterval(poll);
+          delete _loaded['dashboard'];
+        }
+      } catch (_) { clearInterval(poll); }
+    }, 2000);
+  } catch (err) {
+    alert('Failed to start run: ' + err.message);
+  }
+}
+
+// ─── Emails ───────────────────────────────────────────────────────────────────
+
+const _email = { page: 1, pageSize: 25, category: '', digested: '' };
+
+async function loadEmails() {
+  try {
+    const cats = await mbApi('/emails/categories');
+    const sel = document.getElementById('email-cat');
+    sel.innerHTML = '<option value="">All categories</option>';
+    cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
+  } catch (_) {}
+
+  document.getElementById('email-cat').addEventListener('change', e => { _email.category = e.target.value; _email.page = 1; renderEmails(); });
+  document.getElementById('email-digested').addEventListener('change', e => { _email.digested = e.target.value; _email.page = 1; renderEmails(); });
+  document.getElementById('email-pagesize').addEventListener('change', e => { _email.pageSize = +e.target.value; _email.page = 1; renderEmails(); });
+  document.getElementById('email-refresh').addEventListener('click', () => { _email.page = 1; renderEmails(); });
+
+  renderEmails();
+}
+
+async function renderEmails() {
+  const wrap = document.getElementById('emails-table-wrap');
+  const pag  = document.getElementById('emails-pagination');
+  wrap.innerHTML = '<div class="text-muted small">Loading…</div>'; pag.innerHTML = '';
+
+  const q = new URLSearchParams({ page: _email.page, pageSize: _email.pageSize });
+  if (_email.category) q.set('category', _email.category);
+  if (_email.digested) q.set('digested', _email.digested);
+
+  try {
+    const data = await mbApi('/emails?' + q);
+    const rows = data.data, pg = data.pagination;
+
+    if (!rows.length) { wrap.innerHTML = '<div class="text-muted py-3">No emails match the current filters.</div>'; return; }
+
+    wrap.innerHTML = '<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0">' +
+      '<thead class="table-light"><tr><th style="width:40px">#</th><th>From</th><th>Subject</th>' +
+      '<th>Received</th><th>Category</th><th>Imp.</th><th>Digested</th></tr></thead><tbody>' +
+      rows.map(r =>
+        '<tr data-clickable data-id="' + r.id + '">' +
+        '<td class="text-muted small">' + r.id + '</td>' +
+        '<td><span class="trunc-sm" title="' + esc(r.from_email) + '">' + esc(r.from_name || r.from_email) + '</span></td>' +
+        '<td><span class="trunc-lg" title="' + esc(r.subject) + '">' + esc(r.subject) + '</span></td>' +
+        '<td class="text-nowrap small">' + fmtDate(r.received_at) + '</td>' +
+        '<td>' + catBadge(r.category) + '</td>' +
+        '<td>' + impBadge(r.importance) + '</td>' +
+        '<td>' + fmtBool(r.digested_at) + '</td></tr>'
+      ).join('') + '</tbody></table></div>';
+
+    wrap.querySelectorAll('tr[data-clickable]').forEach(tr =>
+      tr.addEventListener('click', () => showEmailDetail(tr.dataset.id)));
+
+    if (pg.totalPages > 1) {
+      pag.innerHTML =
+        '<button class="btn btn-sm btn-outline-secondary" id="pg-prev"' + (pg.page<=1?' disabled':'') + '>&#8249; Prev</button>' +
+        '<span class="small text-muted">Page ' + pg.page + ' of ' + pg.totalPages + ' (' + pg.total + ' total)</span>' +
+        '<button class="btn btn-sm btn-outline-secondary" id="pg-next"' + (pg.page>=pg.totalPages?' disabled':'') + '>Next &#8250;</button>';
+      pag.querySelector('#pg-prev').addEventListener('click', () => { _email.page--; renderEmails(); });
+      pag.querySelector('#pg-next').addEventListener('click', () => { _email.page++; renderEmails(); });
+    } else {
+      pag.innerHTML = '<span class="small text-muted">' + pg.total + ' email(s)</span>';
+    }
+  } catch (err) { wrap.innerHTML = errHtml(err.message); }
+}
+
+async function showEmailDetail(id) {
+  showModal('Email #' + id, '<div class="text-muted">Loading…</div>');
+  try {
+    const r = await mbApi('/emails/' + id);
+    const bodyHtml = r.clean_body
+      ? '<pre class="pre-scroll border rounded p-2 bg-light mb-0">' + esc(r.clean_body) + '</pre>'
+      : '<span class="text-muted small">No body stored.</span>';
+    const jsonHtml = r.analysis_json
+      ? '<pre class="pre-scroll border rounded p-2 bg-light mb-0">' + esc(JSON.stringify(r.analysis_json, null, 2)) + '</pre>'
+      : '<span class="text-muted small">Not analyzed yet.</span>';
+
+    document.getElementById('detailModalBody').innerHTML =
+      '<table class="table table-sm table-borderless mb-3"><tbody>' +
+      drow('From',     esc((r.from_name ? r.from_name + ' ' : '') + '<' + r.from_email + '>')) +
+      drow('To',       esc(r.to_email)) +
+      drow('Subject',  '<strong>' + esc(r.subject) + '</strong>') +
+      drow('Received', fmtDate(r.received_at)) +
+      drow('Message ID', '<code class="small">' + esc(r.message_id) + '</code>') +
+      drow('Source',   esc(r.import_source)) +
+      drow('Category', catBadge(r.category) + (r.event_type ? ' <span class="text-muted small">/ ' + esc(r.event_type) + '</span>' : '')) +
+      drow('Importance', impBadge(r.importance)) +
+      drow('Summary',  esc(r.summary)) +
+      drow('Routine',  fmtBool(r.likely_routine)) +
+      drow('Action Req.', fmtBool(r.possible_action_required)) +
+      drow('In Digest', fmtBool(r.include_in_digest)) +
+      drow('Analyzed', fmtDate(r.analyzed_at)) +
+      drow('Digested', r.digested_at ? fmtDate(r.digested_at) : '<span class="text-warning fw-semibold">pending</span>') +
+      (r.group_id ? drow('Group', '<a href="#" class="open-group" data-gid="' + r.group_id + '">Group #' + r.group_id + '</a>') : '') +
+      '</tbody></table>' +
+      '<h6 class="text-muted mb-1">Clean Body <small class="fw-normal">(' + (r.clean_body_char_count ?? 0) + ' chars)</small></h6>' + bodyHtml +
+      '<h6 class="text-muted mt-3 mb-1">Analysis JSON</h6>' + jsonHtml;
+
+    document.getElementById('detailModalBody').querySelectorAll('.open-group').forEach(a =>
+      a.addEventListener('click', e => { e.preventDefault(); showGroupDetail(e.target.dataset.gid); }));
+  } catch (err) { document.getElementById('detailModalBody').innerHTML = errHtml(err.message); }
+}
+
+// ─── Groups ───────────────────────────────────────────────────────────────────
+
+async function loadGroups() {
+  const wrap = document.getElementById('groups-wrap');
+  try {
+    const rows = await mbApi('/groups');
+    if (!rows.length) { wrap.innerHTML = '<div class="text-muted py-3">No groups found.</div>'; return; }
+
+    wrap.innerHTML = '<div class="mb-2 small text-muted">' + rows.length + ' group(s)</div>' +
+      '<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0">' +
+      '<thead class="table-light"><tr><th>#</th><th>Group Name</th><th>Key</th><th>Emails</th>' +
+      '<th>Routine</th><th>Summary</th><th>In Digest</th><th>Analyzed</th></tr></thead><tbody>' +
+      rows.map(r =>
+        '<tr data-clickable data-id="' + r.id + '">' +
+        '<td class="text-muted small">' + r.id + '</td>' +
+        '<td><strong>' + esc(r.group_name) + '</strong></td>' +
+        '<td><code class="small">' + esc(r.group_key) + '</code></td>' +
+        '<td>' + r.email_count + '</td><td>' + r.routine_count + '</td>' +
+        '<td><span class="trunc-lg text-muted small" title="' + esc(r.group_summary) + '">' + esc(r.group_summary) + '</span></td>' +
+        '<td>' + fmtBool(r.include_in_digest) + '</td>' +
+        '<td class="text-nowrap small">' + fmtDate(r.analyzed_at) + '</td></tr>'
+      ).join('') + '</tbody></table></div>';
+
+    wrap.querySelectorAll('tr[data-clickable]').forEach(tr =>
+      tr.addEventListener('click', () => showGroupDetail(tr.dataset.id)));
+  } catch (err) { wrap.innerHTML = errHtml(err.message); }
+}
+
+async function showGroupDetail(id) {
+  showModal('Group #' + id, '<div class="text-muted">Loading…</div>');
+  try {
+    const { group: g, emails } = await mbApi('/groups/' + id);
+    const listOf = arr => arr && arr.length
+      ? '<ul class="mb-0 small ps-3">' + arr.map(i => '<li>' + esc(String(i)) + '</li>').join('') + '</ul>'
+      : '<span class="text-muted small">none</span>';
+
+    const emailTable = emails.length
+      ? '<table class="table table-sm table-hover mb-0"><thead class="table-light"><tr>' +
+        '<th>#</th><th>From</th><th>Subject</th><th>Received</th><th>Imp.</th><th>Digested</th>' +
+        '</tr></thead><tbody>' +
+        emails.map(e =>
+          '<tr data-clickable data-id="' + e.id + '">' +
+          '<td class="text-muted small">' + e.id + '</td>' +
+          '<td class="small">' + esc(e.from_name || e.from_email) + '</td>' +
+          '<td class="small"><span class="trunc-md" title="' + esc(e.subject) + '">' + esc(e.subject) + '</span></td>' +
+          '<td class="text-nowrap small">' + fmtDate(e.received_at) + '</td>' +
+          '<td>' + impBadge(e.importance) + '</td>' +
+          '<td>' + fmtBool(e.digested_at) + '</td></tr>'
+        ).join('') + '</tbody></table>'
+      : '<div class="text-muted small">No member emails.</div>';
+
+    document.getElementById('detailModalBody').innerHTML =
+      '<table class="table table-sm table-borderless mb-3"><tbody>' +
+      drow('Name',    '<strong>' + esc(g.group_name) + '</strong>') +
+      drow('Key',     '<code>' + esc(g.group_key) + '</code>') +
+      drow('Summary', esc(g.group_summary)) +
+      drow('Emails',  String(g.email_count)) +
+      drow('Routine', String(g.routine_count)) +
+      drow('In Digest', fmtBool(g.include_in_digest)) +
+      drow('Analyzed', fmtDate(g.analyzed_at)) +
+      '</tbody></table>' +
+      '<div class="row g-3 mb-3">' +
+      '<div class="col-md-6"><h6 class="text-muted mb-1">Notable Items</h6>' + listOf(g.notable_items) + '</div>' +
+      '<div class="col-md-6"><h6 class="text-muted mb-1">Aggregate Facts</h6>' + listOf(g.aggregate_facts) + '</div>' +
+      '</div>' +
+      '<h6 class="text-muted mb-2">Member Emails (' + emails.length + ')</h6>' +
+      '<div class="table-responsive">' + emailTable + '</div>';
+
+    document.getElementById('detailModalBody').querySelectorAll('tr[data-clickable]').forEach(tr =>
+      tr.addEventListener('click', () => showEmailDetail(tr.dataset.id)));
+  } catch (err) { document.getElementById('detailModalBody').innerHTML = errHtml(err.message); }
+}
+
+// ─── Memory ───────────────────────────────────────────────────────────────────
+
+async function loadMemory() {
+  const wrap = document.getElementById('memory-wrap');
+  try {
+    const rows = await mbApi('/memory');
+    if (!rows.length) { wrap.innerHTML = '<div class="text-muted py-3">No memory items found.</div>'; return; }
+
+    wrap.innerHTML = '<div class="mb-2 small text-muted">' + rows.length + ' item(s)</div>' +
+      '<div class="table-responsive"><table class="table table-sm align-middle mb-0">' +
+      '<thead class="table-light"><tr><th>Status</th><th>Key</th><th>Type</th><th>Text</th><th>Source</th><th>Expires</th><th>Updated</th>' +
+      '</tr></thead><tbody>' +
+      rows.map(r =>
+        '<tr>' +
+        '<td>' + memBadge(r.status) + '</td>' +
+        '<td><code class="small">' + esc(r.memory_key) + '</code></td>' +
+        '<td><span class="badge bg-light text-dark border">' + esc(r.memory_type) + '</span></td>' +
+        '<td title="' + esc(r.memory_text) + '"><span class="trunc-lg small">' + esc(r.memory_text) + '</span></td>' +
+        '<td class="small text-muted text-nowrap">' + esc(r.source ?? '') + '</td>' +
+        '<td class="small text-nowrap">' + (r.expires_at ? fmtDate(r.expires_at) : '—') + '</td>' +
+        '<td class="small text-nowrap text-muted">' + fmtDate(r.updated_at) + '</td></tr>'
+      ).join('') + '</tbody></table></div>';
+  } catch (err) { wrap.innerHTML = errHtml(err.message); }
+}
+
+// ─── Digests ──────────────────────────────────────────────────────────────────
+
+async function loadDigests() {
+  const wrap = document.getElementById('digests-wrap');
+  try {
+    const { files } = await api('/api/digests');
+    if (!files.length) { wrap.innerHTML = '<div class="text-muted py-3">No digest files found.</div>'; return; }
+
+    wrap.innerHTML = '<div class="mb-2 small text-muted">' + files.length + ' digest(s)</div>' +
+      '<div class="list-group" style="max-width:700px">' +
+      files.map(f =>
+        '<button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"' +
+        ' data-filename="' + esc(f.filename) + '">' +
+        '<div><span class="fw-semibold">' + esc(f.filename) + '</span>' +
+        '<br><small class="text-muted">' + fmtDate(f.mtime) + '</small></div>' +
+        '<span class="badge bg-secondary rounded-pill">' + (f.size / 1024).toFixed(1) + ' KB</span></button>'
+      ).join('') + '</div>';
+
+    wrap.querySelectorAll('[data-filename]').forEach(btn =>
+      btn.addEventListener('click', () => showDigest(btn.dataset.filename)));
+  } catch (err) { wrap.innerHTML = errHtml(err.message); }
+}
+
+async function showDigest(filename) {
+  showModal(filename, '<div class="text-muted">Loading…</div>');
+  try {
+    const { content } = await api('/api/digests/' + encodeURIComponent(filename));
+    document.getElementById('detailModalBody').innerHTML =
+      '<pre class="pre-scroll mb-0" style="max-height:70vh">' + esc(content) + '</pre>';
+  } catch (err) { document.getElementById('detailModalBody').innerHTML = errHtml(err.message); }
+}
+
+// ─── Brain & Prefs ────────────────────────────────────────────────────────────
+
+async function loadBrainPrefs() {
+  const brainEl = document.getElementById('brain-content');
+  const prefsEl = document.getElementById('prefs-content');
+  try {
+    const [brain, prefs] = await Promise.all([mbApi('/brain'), mbApi('/prefs')]);
+    brainEl.textContent = brain.content;
+    prefsEl.value = prefs.content;
+  } catch (err) { brainEl.textContent = 'Error: ' + err.message; }
+}
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+
+async function loadSettings() {
+  try {
+    const cfg = await api('/api/config');
+    document.getElementById('schedule-input').value = cfg.schedule || '';
+    document.getElementById('schedule-hint').textContent = cfg.schedule ? 'Current: ' + cfg.schedule : 'No schedule set';
+
+    document.getElementById('config-body').innerHTML =
+      '<table class="table table-sm table-borderless mb-0"><tbody>' +
+      drow('LLM Base URL', '<code>' + esc(cfg.llm?.baseUrl) + '</code>') +
+      drow('LLM Model',    esc(cfg.llm?.model || '(auto)')) +
+      drow('LLM Preference', esc((cfg.llm?.preference || []).join(', ') || '—')) +
+      drow('LLM Timeout', esc(((cfg.llm?.timeoutMs || 0) / 1000) + 's')) +
+      drow('SMTP',        esc((cfg.smtp?.user || '') + ' → ' + (cfg.smtp?.host || '') + ':' + (cfg.smtp?.port || ''))) +
+      drow('Report To',   esc(cfg.reportTo)) +
+      drow('Retention',   esc(cfg.retentionDays + ' days')) +
+      '</tbody></table>' +
+      '<div class="mt-3"><div class="fw-semibold small mb-2">Mailboxes</div>' +
+      '<table class="table table-sm table-bordered mb-0"><thead class="table-light"><tr><th>ID</th><th>Name</th><th>IMAP User</th><th>Enabled</th></tr></thead><tbody>' +
+      (cfg.mailboxes || []).map(m =>
+        '<tr><td><code>' + esc(m.id) + '</code></td><td>' + esc(m.name) + '</td>' +
+        '<td><code class="small">' + esc(m.imap?.user || '—') + '</code></td>' +
+        '<td>' + fmtBool(m.enabled) + '</td></tr>'
+      ).join('') + '</tbody></table></div>';
+  } catch (err) {
+    document.getElementById('config-body').innerHTML = errHtml(err.message);
+  }
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await initMailboxes();
+
+  // Tab switching
+  document.querySelectorAll('#mainTabs .nav-link').forEach(link =>
+    link.addEventListener('click', e => { e.preventDefault(); switchTab(e.currentTarget.dataset.tab); }));
+
+  // Run buttons
+  document.getElementById('run-btn').addEventListener('click', triggerRun);
+  document.getElementById('run-btn-nav').addEventListener('click', triggerRun);
+
+  // Log clear
+  document.getElementById('log-clear').addEventListener('click', () => {
+    document.getElementById('log-box').innerHTML = '';
+  });
+
+  // Log auto-scroll toggle
+  document.getElementById('log-scroll-toggle').addEventListener('click', e => {
+    _logAutoScroll = !_logAutoScroll;
+    e.target.textContent = 'Auto-scroll: ' + (_logAutoScroll ? 'ON' : 'OFF');
+  });
+
+  // Prefs save
+  document.getElementById('prefs-save-btn').addEventListener('click', async () => {
+    const content = document.getElementById('prefs-content').value;
+    const msgEl   = document.getElementById('prefs-save-msg');
+    try {
+      await mbApi('/prefs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
+      msgEl.innerHTML = '<div class="alert alert-success py-2">Saved successfully.</div>';
+      setTimeout(() => { msgEl.innerHTML = ''; }, 3000);
+    } catch (err) {
+      msgEl.innerHTML = '<div class="alert alert-danger py-2">' + esc(err.message) + '</div>';
+    }
+  });
+
+  // Schedule save
+  document.getElementById('schedule-save').addEventListener('click', async () => {
+    const schedule = document.getElementById('schedule-input').value.trim();
+    const msgEl = document.getElementById('schedule-msg');
+    try {
+      await api('/api/config/schedule', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ schedule }) });
+      msgEl.textContent = '✓ Saved';
+      msgEl.className = 'small text-success';
+      document.getElementById('schedule-hint').textContent = 'Current: ' + schedule;
+    } catch (err) {
+      msgEl.textContent = err.message;
+      msgEl.className = 'small text-danger';
+    }
+    setTimeout(() => { msgEl.textContent = ''; }, 4000);
+  });
+
+  // Schedule presets
+  document.querySelectorAll('.preset-schedule').forEach(btn =>
+    btn.addEventListener('click', () => { document.getElementById('schedule-input').value = btn.dataset.expr; }));
+
+  switchTab('dashboard');
+
+  // Poll run status every 5s
+  setInterval(async () => {
+    try {
+      const s = await api('/api/run/status');
+      updateRunStatusUI(s);
+    } catch (_) {}
+  }, 5000);
+});
+</script>
+</body>
+</html>

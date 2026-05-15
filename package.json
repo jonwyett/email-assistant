@@ -1,0 +1,31 @@
+{
+  "name": "email-assistant",
+  "version": "0.1.0",
+  "description": "Email Watchdog Assistant — local-first email monitoring",
+  "scripts": {
+    "download": "node scripts/download-latest-emails.js",
+    "parse": "node scripts/parse-local-emails.js",
+    "import": "node scripts/import-emails.js --fixtures",
+    "import:live": "node scripts/import-emails.js",
+    "test-llm": "node scripts/test-llm.js",
+    "analyze": "node scripts/analyze-emails.js",
+    "group": "node scripts/group-emails.js",
+    "digest": "node scripts/build-digest.js",
+    "send-digest": "node scripts/send-digest.js",
+    "reflect": "node scripts/reflect.js",
+    "housecleaning": "node scripts/housecleaning.js",
+    "migrate": "node scripts/migrate.js",
+    "go": "node scripts/run-daily.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.0.0",
+    "dotenv": "^16.0.0",
+    "express": "^5.2.1",
+    "html-to-text": "^9.0.0",
+    "imapflow": "^1.0.0",
+    "mailparser": "^3.0.0",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^8.0.7"
+  }
+}
