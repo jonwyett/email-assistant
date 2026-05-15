@@ -68,25 +68,43 @@ async function chatJson(messages, options = {}) {
 async function checkHealth() {
   const { llm } = loadConfig();
 
-  let response;
-  try {
-    response = await fetch(`${llm.baseUrl}/models`, {
-      signal: AbortSignal.timeout(5000),
-    });
-  } catch (err) {
-    if (err.cause?.code === 'ECONNREFUSED' || err.name === 'TimeoutError') {
-      throw new Error(`LM Studio not reachable at ${llm.baseUrl} — is it running?`);
+  const configuredUrl = new URL(llm.baseUrl);
+  const localhostUrl = `http://localhost:${configuredUrl.port}${configuredUrl.pathname}`;
+  const urlsToTry = [llm.baseUrl];
+  if (configuredUrl.hostname !== 'localhost' && configuredUrl.hostname !== '127.0.0.1') {
+    urlsToTry.push(localhostUrl);
+  }
+
+  let lastErr;
+  for (const baseUrl of urlsToTry) {
+    let response;
+    try {
+      response = await fetch(`${baseUrl}/models`, {
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch (err) {
+      if (err.cause?.code === 'ECONNREFUSED' || err.name === 'TimeoutError') {
+        lastErr = new Error(`LM Studio not reachable at ${baseUrl} — is it running?`);
+        continue;
+      }
+      throw err;
     }
-    throw err;
+
+    if (!response.ok) {
+      throw new Error(`LM Studio health check failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const models = data.data ?? [];
+    // If we succeeded via the fallback, update the cached base URL for subsequent calls
+    if (baseUrl !== llm.baseUrl) {
+      console.log(`  Note: configured URL unreachable; using fallback ${baseUrl}`);
+      llm.baseUrl = baseUrl;
+    }
+    return { ok: true, models };
   }
 
-  if (!response.ok) {
-    throw new Error(`LM Studio health check failed: ${response.status} ${response.statusText}`);
-  }
-
-  const data = await response.json();
-  const models = data.data ?? [];
-  return { ok: true, models };
+  throw lastErr;
 }
 
 function selectModel(preferences, models) {

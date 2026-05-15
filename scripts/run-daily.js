@@ -33,8 +33,8 @@ async function runDaily() {
     health = await checkHealth();
   } catch (err) {
     console.error(`  FAILED: ${err.message}`);
-    console.error('  LLM backend must be running. Aborting.');
-    process.exit(1);
+    console.error('  LLM backend unavailable — skipping this run. Will retry at next scheduled time.');
+    return;
   }
 
   if (llm.model) {
@@ -42,14 +42,16 @@ async function runDaily() {
     if (!found) {
       const available = health.models.map(m => m.id).join(', ') || '(none)';
       console.error(`  FAILED: LLM_MODEL "${llm.model}" not found. Available: ${available}`);
-      process.exit(1);
+      console.error('  Skipping this run. Will retry at next scheduled time.');
+      return;
     }
     console.log(`  Model confirmed: ${found.id}`);
   } else {
     const chosen = selectModel(llm.preference, health.models);
     if (!chosen) {
       console.error('  FAILED: No models available in LM Studio. Load a model and retry.');
-      process.exit(1);
+      console.error('  Skipping this run. Will retry at next scheduled time.');
+      return;
     }
     llm.model = chosen;
     console.log(`  Model selected: ${chosen}`);
