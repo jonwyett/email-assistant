@@ -261,7 +261,7 @@ function drow(label, val) {
 }
 
 async function api(url, opts) {
-  const r = await fetch(url, opts);
+  const r = await fetch((window._basePath || '') + url, opts);
   if (!r.ok) {
     let msg = 'HTTP ' + r.status;
     try { msg = (await r.json()).error || msg; } catch(_) {}
@@ -422,7 +422,7 @@ function updateRunStatusUI(s) {
 
 function startLogStream() {
   if (_sseSource) return;
-  _sseSource = new EventSource('/api/logs');
+  _sseSource = new EventSource((window._basePath || '') + '/api/logs');
 
   _sseSource.onmessage = e => {
     const entry = JSON.parse(e.data);

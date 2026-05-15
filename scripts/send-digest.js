@@ -3,9 +3,9 @@
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
-const { loadConfig } = require('../src/config');
+const { loadConfig, getReportsDir } = require('../src/config');
 
-const REPORTS_DIR = path.join(__dirname, '../data/reports');
+const REPORTS_DIR = getReportsDir();
 
 function resolveReportPath(target) {
   if (target) {

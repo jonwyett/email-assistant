@@ -1,6 +1,7 @@
 'use strict';
 
 const path      = require('path');
+const fs        = require('fs');
 const express   = require('express');
 const logStream = require('./src/log-stream');
 const scheduler = require('./src/scheduler');
@@ -12,7 +13,10 @@ logStream.install();
 
 const app = express();
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
+
+// Read once at startup; injected per-request with APP_CENTER_BASE_PATH
+const _indexHtml = fs.readFileSync(path.join(__dirname, 'public/index.html'), 'utf8');
 
 // ── Config & app state ────────────────────────────────────────────────────────
 
@@ -63,8 +67,16 @@ app.use('/api/run',    require('./routes/api/run'));
 app.use('/api/logs',   require('./routes/api/logs'));
 app.use('/api/config', require('./routes/api/config'));
 
-// SPA fallback
-app.get('/{*path}', (req, res) => res.sendFile(path.join(__dirname, 'public/index.html')));
+// SPA fallback — injects window._basePath so the frontend can prefix API calls
+// correctly when running behind the App Center reverse proxy.
+app.get('/{*path}', (req, res) => {
+  const basePath = process.env.APP_CENTER_BASE_PATH || '';
+  const html = _indexHtml.replace(
+    '<head>',
+    `<head>\n<script>window._basePath=${JSON.stringify(basePath)};</script>`
+  );
+  res.type('html').send(html);
+});
 
 // ── Scheduler ─────────────────────────────────────────────────────────────────
 
@@ -72,7 +84,7 @@ scheduler.start(appConfig.schedule, runDaily);
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
-const PORT = appConfig.port;
+const PORT = Number(process.env.PORT || appConfig.port);
 app.listen(PORT, () => {
   console.log(`Email Assistant server running at http://localhost:${PORT}`);
   console.log(`Mailboxes: ${mailboxes.filter(m => m.enabled).map(m => m.name).join(', ') || '(none enabled)'}`);

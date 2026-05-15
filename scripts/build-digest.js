@@ -2,13 +2,13 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadConfig } = require('../src/config');
+const { loadConfig, getReportsDir } = require('../src/config');
 const { getDb } = require('../src/database');
 const { chatJson } = require('../src/llm-client');
 const { loadPrompt } = require('../src/prompts');
 const { loadPrefs } = require('../src/prefs');
 
-const REPORTS_DIR = path.join(__dirname, '../data/reports');
+const REPORTS_DIR = getReportsDir();
 
 function parseSinceArg(args) {
   const idx = args.indexOf('--since');

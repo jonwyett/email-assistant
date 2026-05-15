@@ -3,10 +3,11 @@
 const { Router } = require('express');
 const fs   = require('fs');
 const path = require('path');
+const { getReportsDir } = require('../../src/config');
 const router = Router();
 
 const SAFE_FILENAME = /^[a-zA-Z0-9._-]+\.txt$/;
-const REPORTS_DIR   = path.join(__dirname, '../../data/reports');
+const REPORTS_DIR   = getReportsDir();
 
 router.get('/', (req, res) => {
   try {

@@ -2,12 +2,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadConfig, resolveMailboxArg } = require('../src/config');
+const { loadConfig, getReportsDir, resolveMailboxArg } = require('../src/config');
 const { chat } = require('../src/llm-client');
 const { loadPrompt } = require('../src/prompts');
 const { loadBrain, writeBrain } = require('../src/brain');
 
-const REPORTS_DIR = path.join(__dirname, '../data/reports');
+const REPORTS_DIR = getReportsDir();
 
 async function reflect(targetDate, mailbox, digestText = null) {
   const date = targetDate || new Date().toISOString().slice(0, 10);

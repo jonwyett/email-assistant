@@ -4,10 +4,24 @@ const path = require('path');
 const fs = require('fs');
 
 const PROJECT_ROOT = path.join(__dirname, '..');
-const CONFIG_JSON_PATH = path.join(PROJECT_ROOT, 'config.json');
+
+// When running under App Center, data lives in the assigned persistent dir.
+// Standalone: falls back to the local data/ folder.
+const DATA_ROOT = process.env.APP_CENTER_DATA_DIR
+  ? process.env.APP_CENTER_DATA_DIR
+  : path.join(PROJECT_ROOT, 'data');
+
+// Under App Center, config.json lives in the data dir so it persists across updates.
+const CONFIG_JSON_PATH = process.env.APP_CENTER_DATA_DIR
+  ? path.join(process.env.APP_CENTER_DATA_DIR, 'config.json')
+  : path.join(PROJECT_ROOT, 'config.json');
+
+function getReportsDir() {
+  return path.join(DATA_ROOT, 'reports');
+}
 
 function getMailboxPaths(mailboxId) {
-  const base = path.join(PROJECT_ROOT, 'data', 'mailboxes', mailboxId);
+  const base = path.join(DATA_ROOT, 'mailboxes', mailboxId);
   return {
     base,
     db:           path.join(base, 'email-assistant.db'),
@@ -137,4 +151,4 @@ function loadConfig() {
   return _cached;
 }
 
-module.exports = { loadConfig, getMailboxPaths, resolveMailboxArg };
+module.exports = { loadConfig, getMailboxPaths, getReportsDir, resolveMailboxArg };

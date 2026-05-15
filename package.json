@@ -18,6 +18,11 @@
     "go": "node scripts/run-daily.js",
     "start": "node server.js"
   },
+  "appCenter": {
+    "type": "proxy",
+    "command": ["node", "server.js"],
+    "routes": { "ui": true, "api": true }
+  },
   "dependencies": {
     "better-sqlite3": "^9.0.0",
     "dotenv": "^16.0.0",
