@@ -37,6 +37,29 @@ function formatEmailsForPrompt(rows) {
   }).join('\n');
 }
 
+// Deterministically produce activity_summary lines from routine (imp 3-4) flat email rows.
+function buildFlatActivitySummary(rows) {
+  const buckets = new Map();
+  for (const r of rows) {
+    const sender = r.from_name || r.from_email;
+    const key = `${sender}|${r.event_type}`;
+    if (!buckets.has(key)) buckets.set(key, { sender, event_type: r.event_type, count: 0, summary: r.summary });
+    buckets.get(key).count++;
+  }
+  return Array.from(buckets.values()).map(g => {
+    if (g.count === 1) return g.summary;
+    return `${g.count} ${g.event_type.replace(/_/g, ' ')} from ${g.sender}`;
+  });
+}
+
+// Deterministically produce activity_summary lines from routine (imp 3-4) email groups.
+function buildGroupActivitySummary(groups) {
+  return groups.map(g => {
+    const facts = JSON.parse(g.aggregate_facts || '[]');
+    return facts.length > 0 ? facts.join('; ') : g.group_summary;
+  });
+}
+
 function formatGroupsForPrompt(groups) {
   return groups.map(g => {
     const notableItems   = JSON.parse(g.notable_items  || '[]');
@@ -134,37 +157,44 @@ async function buildMailboxSection(mailbox, sinceClause, today) {
       if (!maxDate || g.max_date > maxDate) maxDate = g.max_date;
     }
 
-    const showGroups      = groups.filter(g => g.max_importance > 2);
     const suppressedGroups = groups.filter(g => g.max_importance <= 2);
+    const routineGroups    = groups.filter(g => g.max_importance >= 3 && g.max_importance <= 4);
+    const elevatedGroups   = groups.filter(g => g.max_importance >= 5);
     const suppressedCount  = suppressedGroups.reduce((n, g) => n + g.email_count, 0);
+
+    const deterministicActivity = buildGroupActivitySummary(routineGroups);
+    const mySuppress = { marketing: suppressedCount };
 
     const sectionHeader = `${mailbox.name} — ${totalEmails} email(s) — ${dateRange(minDate, maxDate)}`;
 
-    if (showGroups.length === 0) {
+    if (elevatedGroups.length === 0) {
       const digest = {
-        needs_attention: [], worth_noting: [], activity_summary: [],
-        suppressed: { marketing: suppressedCount },
+        needs_attention: [], worth_noting: [],
+        activity_summary: deterministicActivity,
+        suppressed: mySuppress,
       };
       return { text: buildReportText(sectionHeader, digest), emailIds, totalEmails };
     }
 
-    let promptContent = formatGroupsForPrompt(showGroups);
-    if (suppressedGroups.length > 0) {
-      promptContent += `\n\nNote: ${suppressedCount} email(s) in ${suppressedGroups.length} group(s) were pre-identified as marketing/promotional and excluded from the above list. Add them to suppressed.marketing in your response.`;
-    }
-
-    console.log(`  ${mailbox.name}: ${totalEmails} email(s) in ${groups.length} group(s) (${suppressedGroups.length} suppressed)`);
+    const elevatedEmailCount = elevatedGroups.reduce((n, g) => n + g.email_count, 0);
+    console.log(`  ${mailbox.name}: ${totalEmails} email(s) — ${elevatedGroups.length} group(s) elevated, ${routineGroups.length} routine, ${suppressedGroups.length} suppressed`);
 
     const messages = [
       { role: 'system', content: loadPrompt('pass3-system', { prefs }) },
-      { role: 'user',   content: loadPrompt('pass3-user',   { date: today, total: totalEmails, emails: promptContent }) },
+      { role: 'user',   content: loadPrompt('pass3-user',   { date: today, total: elevatedEmailCount, emails: formatGroupsForPrompt(elevatedGroups) }) },
     ];
     const digestJson = await chatJson(messages);
-    return { text: buildReportText(sectionHeader, digestJson), emailIds, totalEmails };
+    const merged = {
+      needs_attention: digestJson.needs_attention || [],
+      worth_noting:    digestJson.worth_noting    || [],
+      activity_summary: deterministicActivity,
+      suppressed: mySuppress,
+    };
+    return { text: buildReportText(sectionHeader, merged), emailIds, totalEmails };
 
   } else {
     const rows = db.prepare(`
-      SELECT e.id, e.subject, e.from_email, e.received_at,
+      SELECT e.id, e.subject, e.from_name, e.from_email, e.received_at,
              ea.category, ea.event_type, ea.summary, ea.importance,
              ea.likely_routine, ea.possible_action_required
       FROM email_analysis ea
@@ -185,15 +215,37 @@ async function buildMailboxSection(mailbox, sinceClause, today) {
       if (!maxDate || r.received_at > maxDate) maxDate = r.received_at;
     }
 
-    console.log(`  ${mailbox.name}: ${rows.length} email(s)`);
+    const suppressedRows = rows.filter(r => r.importance <= 2);
+    const routineRows    = rows.filter(r => r.importance >= 3 && r.importance <= 4);
+    const elevatedRows   = rows.filter(r => r.importance >= 5);
 
+    const deterministicActivity = buildFlatActivitySummary(routineRows);
+    const mySuppress = { marketing: suppressedRows.length };
     const sectionHeader = `${mailbox.name} — ${rows.length} email(s) — ${dateRange(minDate, maxDate)}`;
+
+    if (elevatedRows.length === 0) {
+      const digest = {
+        needs_attention: [], worth_noting: [],
+        activity_summary: deterministicActivity,
+        suppressed: mySuppress,
+      };
+      return { text: buildReportText(sectionHeader, digest), emailIds, totalEmails: rows.length };
+    }
+
+    console.log(`  ${mailbox.name}: ${rows.length} email(s) — ${elevatedRows.length} elevated, ${routineRows.length} routine, ${suppressedRows.length} suppressed`);
+
     const messages = [
       { role: 'system', content: loadPrompt('pass3-system', { prefs }) },
-      { role: 'user',   content: loadPrompt('pass3-user',   { date: today, total: rows.length, emails: formatEmailsForPrompt(rows) }) },
+      { role: 'user',   content: loadPrompt('pass3-user',   { date: today, total: elevatedRows.length, emails: formatEmailsForPrompt(elevatedRows) }) },
     ];
     const digestJson = await chatJson(messages);
-    return { text: buildReportText(sectionHeader, digestJson), emailIds, totalEmails: rows.length };
+    const merged = {
+      needs_attention: digestJson.needs_attention || [],
+      worth_noting:    digestJson.worth_noting    || [],
+      activity_summary: deterministicActivity,
+      suppressed: mySuppress,
+    };
+    return { text: buildReportText(sectionHeader, merged), emailIds, totalEmails: rows.length };
   }
 }
 
@@ -232,7 +284,7 @@ async function buildDigest(opts, mailboxes) {
   const countSuffix  = totalEmails > 0 ? ` — ${totalEmails} email(s)` : '';
   const globalHeader = `Email Digest — ${today}${countSuffix}`;
 
-  const SEP       = '─'.repeat(50);
+  const SEP       = '####';
   const fileLines = [globalHeader, ''];
 
   for (const mailbox of mailboxes) {
